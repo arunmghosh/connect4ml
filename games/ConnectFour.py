@@ -14,7 +14,7 @@ class ConnectFour(DeterministicGame):
 
         # useful information about the board
         self.player_tokens = np.array(["R", "Y"])
-        self.col_slots_left = np.zeros(7, dtype=int)
+        self.col_slots_left = np.array([6, 6, 6, 6, 6, 6, 6], dtype=int)
 
     def update_grid(self, move):
         # player is the index of the current player
@@ -25,6 +25,7 @@ class ConnectFour(DeterministicGame):
 
         # update board state
         self.board_state[next_slot][move] = self.player_tokens[self.current_player]
+        self.col_slots_left[move] -= 1
 
     def check_for_four(self, row_inc, col_inc, row, col):
         # base_units is the number of rows, columns or diagonals
