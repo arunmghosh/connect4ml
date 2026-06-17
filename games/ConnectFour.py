@@ -21,24 +21,28 @@ class ConnectFour(DeterministicGame):
         self.current_streak = 0
         self.traversal_steps = 0  # tracks how much of a row, column or diagonal has been checked
 
-    def update_grid(self, move):
+    def update_board(self, move, board):
         # player is the index of the current player
         # move is the column index in which the player places a token
 
         # find the lowest empty slot in column
-        next_slot = self.col_slots_left[move]
+        next_slot = self.col_heights[move]
 
         # update board state
-        self.board_state[next_slot][move] = self.player_tokens[self.current_player]
+        board[next_slot][move] = self.player_tokens[self.current_player]
         self.col_heights[move] += 1
 
-    def check_for_four(self, row_inc, col_inc, row, col):
+    def update_mask(self, move):
+        cell_id = move + self.col_heights[move]
+        self.player_masks[self.current_player].append(cell_id)
+
+    def check_for_four(self, row_inc, col_inc, row, col, board):
         # (row, col) is starting coordinate
         # row_inc and col_inc tell us direction of search
 
         self.current_streak = 0
         self.traversal_steps = 0
-        self.pointer = self.board_state[row][col]  # stores color of current streak
+        self.pointer = board[row][col]  # stores color of current streak
         row_pointer = row
         col_pointer = col
 
@@ -46,10 +50,10 @@ class ConnectFour(DeterministicGame):
             if row_pointer > 5 or col_pointer > 6:
                 return False  # passed the edge of the grid, search complete
             if self.pointer != "":
-                if self.board_state[row_pointer][col_pointer] != self.pointer:
+                if board[row_pointer][col_pointer] != self.pointer:
                     if self.traversal_steps > 3:
                         return False  # not enough spaces left to get 4 in a row
-                    self.pointer = self.board_state[row_pointer][col_pointer]  # switch colors case
+                    self.pointer = board[row_pointer][col_pointer]  # switch colors case
                 else:
                     self.current_streak += 1
                     if self.current_streak == 4:
@@ -58,46 +62,46 @@ class ConnectFour(DeterministicGame):
                 if self.traversal_steps > 2:
                     return False  # not enough spaces left to get 4 in a row
                 self.current_streak = 0
-                self.pointer = self.board_state[row_pointer + row_inc][col_pointer + col_inc]
+                self.pointer = board[row_pointer + row_inc][col_pointer + col_inc]
             row_pointer += row_inc
             col_pointer += col_inc
             self.traversal_steps += 1
         self.pointer = ""  # if the game is over and no 4-streak is found, it's a draw
         return False
 
-    def get_possible_moves(self):
+    def get_possible_moves(self, board):
         # first check for a four in a row, and return an empty list if found
 
         # start with horizontal case
         for row in range(6):
             # if middle of row is empty, impossible to have four in a row
-            if self.board_state[row][3] != "":
-                if self.check_for_four(0, 1, row, 0):
+            if board[row][3] != "":
+                if self.check_for_four(0, 1, row, 0, board):
                     return []
 
         # now check the vertical
         for col in range(7):
             # if column is not at least 4 pieces high, impossible to have four in a row
-            if self.board_state[3][col] != "":
-                if self.check_for_four(1, 0, 0, col):
+            if board[3][col] != "":
+                if self.check_for_four(1, 0, 0, col, board):
                     return []
 
         # now check bottom right to top left diagonal
         upper_bound = self.col_heights[6]
         for row in range(0, upper_bound):
-            if self.check_for_four(1, -1, row, 6):
+            if self.check_for_four(1, -1, row, 6, board):
                 return []
         for col in range(3, 6):
-            if self.check_for_four(1, -1, 0, col):
+            if self.check_for_four(1, -1, 0, col, board):
                 return []
 
         # now check bottom left to top right diagonal
         upper_bound = self.col_heights[0]
         for row in range(0, upper_bound):
-            if self.check_for_four(1, 1, row, 0):
+            if self.check_for_four(1, 1, row, 0, board):
                 return []
         for col in range(1, 4):
-            if self.check_for_four(1, 1, 0, col):
+            if self.check_for_four(1, 1, 0, col, board):
                 return []
 
         # now check if there are any columns with open slots
@@ -114,3 +118,25 @@ class ConnectFour(DeterministicGame):
             self.update_result(self.players[1] + " wins!")
         else:
             self.update_result("Draw.")
+
+    def encode(self):
+        pos_id = 0
+        for m in self.player_masks[self.current_player]:
+            pos_id += 2**m
+
+        heights_id = 0
+        for h in range(7):
+            heights_id += (100 ** h) * (2 ** self.col_heights[h])
+
+        pos_id += (2 ** 42) * heights_id
+        return pos_id
+
+    def score_current_pos(self, first_eval):
+        self.best_move -= self.best_move  # reset, same as setting it to 0, avoids looking like a definition
+        stopping_point = 0
+        if first_eval:
+            stopping_point += self.max_depth
+        else:
+            stopping_point += self.reeval_depth
+
+

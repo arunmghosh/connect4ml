@@ -6,7 +6,7 @@ class User(Strategy):
         super().__init__("User")
 
     @staticmethod
-    def choose_move(possible_moves):
+    def choose_move(possible_moves, game):
         print("Open columns: ", possible_moves)
         choice = input("Your move is: ")
         return int(choice)

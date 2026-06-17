@@ -7,7 +7,7 @@ class Player:
         else:
             self.name = Player.id
         Player.id += 1
-        self.strategy = strategy # Strategy object
+        self.strategy = strategy  # Strategy object
 
-    def move(self, possible_moves):
-        return self.strategy.choose_move(possible_moves)
+    def move(self, possible_moves, game):
+        return self.strategy.choose_move(possible_moves, game)
