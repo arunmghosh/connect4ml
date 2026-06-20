@@ -6,9 +6,9 @@ class DeterministicGame:
         self.name = name
 
         # player related attributes
-        self.players = players  # array of Player objects
-        self.num_players = len(players)
+        self.players = players  # array of Player objects, assume there are 2 players
         self.current_player = 0  # player moving, index
+        self.player_masks = [[], []]  # lists of player moves
 
         # game status attributes
         self.game_finished = False  # finished = True
@@ -16,14 +16,9 @@ class DeterministicGame:
         self.result = "message overridden in child class"
 
         # analysis tools
-        self.analysis_board = board_state  # decoy board so we don't mess up real board when analyzing positions
-        self.analysis_turn = self.current_player
-        self.prev_move = 0  # will only be stored when using the analysis board
+        self.prev_move = 0  # for the sake of backtracking during analysis
 
         # storing game data
-        self.player_masks = self.player_masks = [[] for _ in range(self.num_players)]  # will keep lists of player moves
-        for i in range(self.num_players):
-            self.player_masks[i] = []
         self.filename = filename
         try:
             with open(self.filename, "rb") as f:
@@ -32,59 +27,69 @@ class DeterministicGame:
             self.recorded_positions = dict()  # dictionary to store game data in
 
     # player related methods
-    def switch_turn(self, player_pointer):
-        player_pointer += 1
-        player_pointer = player_pointer % self.num_players
+    def switch_turn(self):
+        self.current_player += 1
+        self.current_player = self.current_player % 2
 
     # game status related methods
-    def get_possible_moves(self, board):
+    def get_possible_moves(self):
         return []  # override in child classes
 
-    def get_board_state(self):
-        return self.board_state
-
-    def update_board(self, move, board):
-        pass  # override in child classes
+    def update_board(self, move):
+        self.prev_move = move
 
     def update_mask(self, move):
-        self.player_masks[self.current_player].append(move)
+        self.player_masks[self.current_player].append(move)  # override in child classes
 
     def update_status(self):
-        if not self.get_possible_moves(self.board_state):
+        if not self.get_possible_moves():
             self.game_finished = True
 
     def update_result(self, msg: str):
         self.result = msg
 
     # minimax helper
-    def copy_pos(self):
-        self.analysis_board = self.board_state.copy()
+    def __copy__(self):
+        game = DeterministicGame(self.name, self.players, self.board_state, self.filename)
+        game.player_masks = self.player_masks.copy()
+        game.current_player = self.current_player
+        return game
+        # add more things in child classes
 
-    def get_decoy_board(self):
-        return self.analysis_board
-
-    def get_trans_table(self):
-        return self.recorded_positions
-
-    def get_analysis_turn(self):
-        return self.analysis_turn
-
-    def set_prev_move(self, move):
-        self.prev_move = move
-
-    def undo_move(self, board):
-        pass  # override in child classes
+    def undo_move(self):
+        self.player_masks[self.current_player].pop()
 
     # heuristic helper
-    def score_current_pos(self, board):
+    def has_win(self, player):
+        return False
+        # override in child classes
+
+    def evaluate_win_chance(self, player):
         return 0
         # override in child classes
-        # will return a heuristic evaluation of the current position
+
+    def score_current_pos(self):
+        # positive is good for player 1
+        # check if current player has a win
+        if self.has_win(self.current_player):
+            # 100000 if player 1, -100000 if player 2
+            return 100000 - (self.current_player * 200000)
+
+        # check if next player has a win
+        next_player = (self.current_player + 1) % 2
+        if self.has_win(next_player):
+            return -100000 + (self.current_player * 200000)
+
+        # if neither player wins immediately, count their chances to win
+        return self.evaluate_win_chance(self.current_player) - self.evaluate_win_chance(next_player)
 
     # data collection related methods
-    def encode(self, board):
+    def encode(self):
         return 0 # override in child classes
         # new positions will be added to the transposition table
+
+    def logged_current_pos(self):
+        return self.encode() in self.recorded_positions
 
     def export_new_data(self):
         with open(self.filename, "wb") as f:
@@ -93,10 +98,10 @@ class DeterministicGame:
     # gameplay mechanic
     def play_game(self):
         while not self.game_finished:
-            move = self.players[self.current_player].move(self.get_possible_moves(self.board_state), self)
-            self.update_board(move, self.board_state)
+            move = self.players[self.current_player].move(self.get_possible_moves(), self)
+            self.update_board(move)
             self.update_mask(move)
             self.update_status()
-            self.switch_turn(self.current_player)
+            self.switch_turn()
         print(self.result)
         self.export_new_data()

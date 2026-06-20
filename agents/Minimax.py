@@ -4,9 +4,11 @@ import Strategy
 class Minimax(Strategy):
     def __init__(self):
         super().__init__("Minimax")
+        self.analysis_game = None  # allocated on first use
+        self.max_depth = 7
+        self.reeval_depth = 2  # if we got more information, we want to update the transposition table
 
-    @staticmethod
-    def process_analysis(arr, trans_table, pos_key, base_turn):
+    def process_analysis(self, arr, pos_key, base_turn):
         # get stats to update trans table
         best_score = 0
         if base_turn % 2 == 0:
@@ -16,67 +18,61 @@ class Minimax(Strategy):
         best_move = arr.index(best_score)
 
         # update trans table
-        trans_table[pos_key]["score"] = best_score
-        trans_table[pos_key]["best move"] = best_move
+        self.analysis_game.trans_table[pos_key]["score"] = best_score
+        self.analysis_game.trans_table[pos_key]["best move"] = best_move
 
         # return the best move
         return best_move
 
-    @staticmethod
-    def minimax_helper(game, depth, stop_depth, board, trans_table, base_turn):
+    def minimax_helper(self, depth, stop_depth, base_turn):
         if depth == stop_depth:
             # base case, return heuristic evaluation
-            return game.score_current_pos(board)
+            return self.analysis_game.score_current_pos()
 
         # recursive call
-        game.switch_turn(game.get_analysis_turn())
-        next_moves = game.get_possible_moves(board)
+        self.analysis_game.switch_turn()
+        next_moves = self.analysis_game.get_possible_moves()
         next_move_evals = []
         for n in range(len(next_moves)):
-            game.update_board(next_moves[n], board)
-            key = game.encode(board)
-            if key in trans_table:
-                next_move_evals.append(Minimax.minimax_helper(game, depth + 1, depth + 1, board, trans_table,
-                                                              base_turn))
+            self.analysis_game.update_board(next_moves[n])
+            if self.analysis_game.logged_current_pos():
+                next_move_evals.append(self.minimax_helper(depth + 1, depth + 1, base_turn))
             else:
-                next_move_evals.append(Minimax.minimax_helper(game, depth + 1, stop_depth, board, trans_table,
-                                                              base_turn))
-            game.undo_move(board)
+                next_move_evals.append(self.minimax_helper(depth + 1, stop_depth, base_turn))
+            self.analysis_game.undo_move()
 
         # choose best rating
         if (base_turn + depth) % 2 == 1:
             return max(next_move_evals)
         return min(next_move_evals)
 
-    @staticmethod
-    def choose_move(possible_moves, game):
-        # first lookup current position
-        pos = game.get_board_state()
-        trans_table = game.get_trans_table()
-        max_depth = 7
-        reeval_depth = 2  # if we got more information, we want to update the transposition table
-        board = game.get_decoy_board()
-        base_turn = game.get_analysis_turn()  # if 0, max score, if 1, min score
+    def choose_move(self, possible_moves, game):
+        # allocate once on first call
+        if self.analysis_game is None:
+            self.analysis_game = game.copy()  # already synced to current real state
 
-        if pos in trans_table:
+        # first lookup current position
+        pos = self.analysis_game.encode()
+        base_turn = self.analysis_game.current_player  # if 0, max score, if 1, min score
+
+        if self.analysis_game.logged_current_pos():
             # position has already been evaluated, check heuristic valuations of each immediate child position
             scores = []
             for m in range(len(possible_moves)):
-                game.update_board(possible_moves[m], board)
-                scores.append(game.score_current_pos(board))
-                game.undo_move(board)
-            return Minimax.process_analysis(scores, trans_table, pos, base_turn)
+                self.analysis_game.update_board(possible_moves[m])
+                scores.append(self.analysis_game.score_current_pos())
+                self.analysis_game.undo_move()
+            return self.process_analysis(scores, pos, base_turn)
 
         # new position, trigger evaluation
         move_evals = []
         for m in range(len(possible_moves)):
-            game.update_board(possible_moves[m], board)
-            key = game.encode(board)
-            if key in trans_table:
-                move_evals.append(Minimax.minimax_helper(game, 1, reeval_depth, board, trans_table, base_turn))
+            self.analysis_game.update_board(possible_moves[m])
+            if self.analysis_game.logged_current_pos():
+                move_evals.append(self.minimax_helper(1, self.reeval_depth, base_turn))
             else:
-                move_evals.append(Minimax.minimax_helper(game, 1, max_depth, board, trans_table, base_turn))
-            game.undo_move(board)
+                move_evals.append(self.minimax_helper(1, self.max_depth, base_turn))
+            game.undo_move()
 
         # choose best move
-        return Minimax.process_analysis(move_evals, trans_table, pos, base_turn)
+        return self.process_analysis(move_evals, pos, base_turn)
