@@ -11,3 +11,6 @@ class Player:
 
     def move(self, possible_moves, game):
         return self.strategy.choose_move(possible_moves, game)
+
+    def __str__(self):
+        return self.name

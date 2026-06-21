@@ -13,7 +13,8 @@ class DeterministicGame:
         # game status attributes
         self.game_finished = False  # finished = True
         self.board_state = board_state  # where moves are in the array
-        self.result = "message overridden in child class"
+        self.winner = None  # index of player if there is a winner, None if there is a draw
+        self.result = "Draw."
 
         # analysis tools
         self.prev_move = 0  # for the sake of backtracking during analysis
@@ -35,11 +36,12 @@ class DeterministicGame:
     def get_possible_moves(self):
         return []  # override in child classes
 
+    def update_mask(self, move):
+        self.player_masks[self.current_player].append(move)
+
     def update_board(self, move):
         self.prev_move = move
-
-    def update_mask(self, move):
-        self.player_masks[self.current_player].append(move)  # override in child classes
+        self.update_mask(move)
 
     def update_status(self):
         if not self.get_possible_moves():
@@ -48,12 +50,25 @@ class DeterministicGame:
     def update_result(self, msg: str):
         self.result = msg
 
+    def determine_outcome(self):
+        if self.winner == 0:
+            self.update_result(self.players[0] + " wins!")
+        elif self.winner == 1:
+            self.update_result(self.players[1] + " wins!")
+        # result string is "Draw." by default
+
     # minimax helper
     def __copy__(self):
         game = DeterministicGame(self.name, self.players, self.board_state, self.filename)
         game.player_masks = self.player_masks.copy()
         game.current_player = self.current_player
         return game
+        # add more things in child classes
+
+    def sync(self, game):
+        self.board_state = game.board_state.copy()
+        self.player_masks = game.player_masks.copy()
+        self.current_player = game.current_player
         # add more things in child classes
 
     def undo_move(self):
@@ -100,8 +115,8 @@ class DeterministicGame:
         while not self.game_finished:
             move = self.players[self.current_player].move(self.get_possible_moves(), self)
             self.update_board(move)
-            self.update_mask(move)
             self.update_status()
             self.switch_turn()
+        self.determine_outcome()
         print(self.result)
         self.export_new_data()

@@ -17,9 +17,13 @@ class ConnectFour(DeterministicGame):
         self.col_heights = np.array([0, 0, 0, 0, 0, 0, 0], dtype=int)
 
         # search board
-        self.pointer = ""  # stores color of streak being analyzed, will store winner if 4-streak found
         self.current_streak = 0
         self.traversal_steps = 0  # tracks how much of a row, column or diagonal has been checked
+        self.streak_types = [1, 7, 6, 8]
+        # horizontal streak is consecutive numbers
+        # vertical streak is consecutive numbers equivalent mod 7
+        # bottom right to top left diagonal is consecutive numbers equivalent mod 6
+        # bottom left to top right diagonal is consecutive numbers equivalent mod 8
 
     # turn mechanics
     def update_board(self, move):
@@ -39,16 +43,20 @@ class ConnectFour(DeterministicGame):
         self.player_masks[self.current_player].append(cell_id)
 
     @staticmethod
-    def arithmetic_sequence_found(arr, factor, length):
+    def arithmetic_seqs_found(arr, opp_arr, factor, length, blanks):
         # given an unsorted list of integers, search for an arithmetic sequence
-        # length is the number of terms we want
+        # opp_arr is passed to differentiate between blank spaces and spaces occupied by opponent
         # factor is the difference between consecutive terms
+        # length is the number of terms we want
+        # blanks is the number of blank spaces we're allowed
 
-        stop_point = max(arr)  # find max value of the list to bound search
-        seq = []  # stores sequence we are building
+        stop_point = 41  # highest cell index in the grid
+        seqs = []  # stores sequences we find
+        blanks_used = 0
 
         # check all equivalence classes mod [factor]
         for e in range(factor):
+            seq = []  # stores numbers in the current sequence
             pointer = e  # element we're looking for in the list
             while pointer <= stop_point:
                 if pointer in arr:
@@ -68,12 +76,22 @@ class ConnectFour(DeterministicGame):
                     else:
                         seq.append(pointer)
                         if len(seq) == length:  # completed the sequence
-                            return seq
-                else:
+                            seqs.append(seq)
+                elif pointer in opp_arr:  # opponent occupies spot
                     seq.clear()
+                    blanks_used = 0
+                else:  # spot is blank, check if it is accessible
+                    if blanks_used == blanks:  # run out of blanks allowed
+                        seq.clear()
+                        blanks_used = 0
+                    else:
+                        seq.append(pointer)
+                        blanks_used += 1
+                        if len(seq) == length:  # completed the sequence
+                            seqs.append(seq)
                 pointer += factor
 
-        return None  # didn't find the sequence
+        return seqs
 
     @staticmethod
     def get_blockages(buffer_space, opp_mask, prev_space, h, factor):
@@ -105,59 +123,38 @@ class ConnectFour(DeterministicGame):
         mask = self.player_masks[player]
         opp_mask = self.player_masks[(player + 1) % 2]
 
-        # horizontal streak is consecutive numbers
-        # vertical streak is consecutive numbers equivalent mod 7
-        # bottom right to top left diagonal is consecutive numbers equivalent mod 6
-        # bottom left to top right diagonal is consecutive numbers equivalent mod 8
-        streak_types = [1, 7, 6, 8]
-
-        for t in range(len(streak_types)):
-            factor = streak_types[t]
-            streak = self.arithmetic_sequence_found(mask, factor, length)
-            if streak:
+        for t in range(len(self.streak_types)):
+            factor = self.streak_types[t]
+            streaks = self.arithmetic_seqs_found(mask, opp_mask, factor, length, buffer)
+            if len(streaks) > 0:
                 if buffer == 0:  # streak is already a four in a row
                     return True
 
-                # if streak is less than 4, check that the buffer spaces are open
+                # if streaks have less than 4 elements, check that the buffer spaces are open
+                for st in streaks:
+                    low_buffer = min(st) - factor
+                    low_block = self.get_blockages(low_buffer, opp_mask, min(st), 0, factor)
+                    high_buffer = max(st) + factor
+                    high_block = self.get_blockages(high_buffer, opp_mask, max(st), 1, factor)
 
-                # first check the low index buffer space (next to start of streak)
-                low_buffer = min(streak) - factor
-                blockages = self.get_blockages(low_buffer, opp_mask, min(streak), 0, factor)
+                    if buffer == 1:
+                        if fork and low_block == 0.0 and high_block == 0.0:
+                            return True
+                        if not fork and (low_block == 0.0 or high_block == 0.0):
+                            return True
 
-                if buffer == 2:
-                    if blockages == 0.0:
+                    else:  # buffer == 2
                         low_low_buffer = low_buffer - factor
-                        blockages += 0.25 * self.get_blockages(low_low_buffer, opp_mask, low_buffer, 0, factor)
-                    else:
-                        # consider it blocked because the streak was already blocked before this cell
-                        blockages += 0.25
+                        low_block += 0.5 * self.get_blockages(low_low_buffer, opp_mask, low_buffer, 0, factor)
+                        high_high_buffer = high_buffer + factor
+                        high_block += 0.5 * self.get_blockages(high_high_buffer, opp_mask, high_buffer, 1, factor)
 
-                if fork:  # blocked on one side and we needed both sides open
-                    return blockages < 1.0
+                        if fork and min(low_block, high_block) == 0.0 and max(low_block, high_block) < 1.0:
+                            return True
+                        if not fork and min(low_block, high_block) == 0.0:
+                            return True
 
-                # check the high index buffer space
-                high_buffer = max(streak) + factor
-
-                # need to keep track of this individual blockage if we need high and high-high buffers to be open
-                high_block = self.get_blockages(high_buffer, opp_mask, max(streak), 1, factor)
-                blockages += high_block
-
-                if buffer == 1:
-                    if fork:
-                        return blockages < 1.0
-                    return blockages < 2.0
-
-                # buffer == 2
-                high_high_buffer = high_buffer + factor
-                if high_block == 0.0:
-                    blockages += 0.25 * self.get_blockages(high_high_buffer, opp_mask, high_buffer, 1, factor)
-                else:
-                    # consider it blocked because the streak was already blocked before this cell
-                    blockages += 0.25
-
-                if fork:
-                    return blockages < 0.5
-                return blockages < 1.5  # will be at most 1.25 if only one side is blocked
+        return False  # no streaks found
 
     def get_possible_moves(self):
         # first check for a four in a row, and return an empty list if found
@@ -172,14 +169,6 @@ class ConnectFour(DeterministicGame):
             if self.col_heights[col] < 6:
                 open_slots.append(col)
         return open_slots
-
-    def determine_outcome(self):
-        if self.pointer == "R":
-            self.update_result(self.players[0] + " wins!")
-        elif self.pointer == "Y":
-            self.update_result(self.players[1] + " wins!")
-        else:
-            self.update_result("Draw.")
 
     # storing data
     def encode(self):
@@ -215,15 +204,19 @@ class ConnectFour(DeterministicGame):
 
     def evaluate_win_chance(self, player):
         score = 0
+        mask = self.player_masks[self.current_player]
+        opp_mask = self.player_masks[(self.current_player + 1) % 2]
 
         if player == self.current_player:
             # player is about to move, check for 2-streak open in one direction
-            if self.has_streak(player, 2, False):
-                score += 100
+            for st in self.streak_types:
+                current_options = self.arithmetic_seqs_found(mask, opp_mask, st, 4, 2)
+                score += 100 * current_options
 
         else:  # player is not about to move, check if they have a winning move opponent must block
-            if self.has_streak(player, 3, False):
-                score += 100
+            for st in self.streak_types:
+                current_options = self.arithmetic_seqs_found(mask, opp_mask, st, 4, 1)
+                score += 100 * current_options
 
         return score
 
@@ -232,6 +225,10 @@ class ConnectFour(DeterministicGame):
         game = super().copy()
         game.col_heights = self.col_heights.copy()
         return game
+
+    def sync(self, game):
+        super().sync(game)
+        self.col_heights = game.col_heights.copy()
 
     def undo_move(self):
         super().undo_move()

@@ -4,9 +4,9 @@ import Strategy
 class Minimax(Strategy):
     def __init__(self):
         super().__init__("Minimax")
-        self.analysis_game = None  # allocated on first use
         self.max_depth = 7
         self.reeval_depth = 2  # if we got more information, we want to update the transposition table
+        self.analysis_game = None  # allocated on first use in child class, copy of game object
 
     def process_analysis(self, arr, pos_key, base_turn):
         # get stats to update trans table
@@ -50,6 +50,8 @@ class Minimax(Strategy):
         # allocate once on first call
         if self.analysis_game is None:
             self.analysis_game = game.copy()  # already synced to current real state
+        else:
+            self.analysis_game.sync(game)
 
         # first lookup current position
         pos = self.analysis_game.encode()
