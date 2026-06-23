@@ -13,6 +13,8 @@ class ConnectFour(DeterministicGame):
         super().__init__("Connect 4", players, ConnectFour.empty_board, "connect_4_transposition.pkl")
 
         # useful information about the board
+        self.min_board_ind = 0
+        self.max_board_ind = self.min_board_ind + (len(self.board_state) * len(self.board_state[0])) - 1
         self.player_tokens = np.array(["R", "Y"])
         self.col_heights = np.array([0, 0, 0, 0, 0, 0, 0], dtype=int)
 
@@ -42,15 +44,41 @@ class ConnectFour(DeterministicGame):
         cell_id = move + (self.col_heights[move] * 7)
         self.player_masks[self.current_player].append(cell_id)
 
-    @staticmethod
-    def arithmetic_seqs_found(arr, opp_arr, factor, length, blanks):
+    # determining game status
+    def cell_in_grid(self, cell: int):
+        return self.min_board_ind <= cell <= self.max_board_ind
+
+    def cell_is_reachable(self, cell: int):
+        col = cell % 7
+        row = (cell - col) / 7
+        return row == self.col_heights[col] + 1  # True if cell is empty and right above highest cell in column
+
+    def num_steps_possible(self, num_steps: int, start_cell: int, vert_inc, hor_inc):
+        # check if index of cell three steps up or down is in the grid
+        # vert_inc is 1 if up, -1 if down, 0 if only checking horizontally
+        overflow_col = self.cell_in_grid(start_cell + (7 * vert_inc * num_steps))
+
+        # check if index of cell three steps left or right is in the grid
+        # hor_inc is 1 if right, -1 if left, 0 if only checking vertically
+        overflow_row = 0 <= (start_cell % 7) + (hor_inc * num_steps) <= 6
+
+        return overflow_row and overflow_col
+
+    def is_seq_possible(self, num_steps: int, factor: int, direction: int, start_cell: int):
+        # direction is 1 if forward (index is getting higher), -1 if backward (index is getting lower)
+        if factor == 1:  # just a horizontal check
+            return self.num_steps_possible(num_steps, start_cell, 0, direction)
+        hor_inc = (factor - 7) * direction
+        return self.num_steps_possible(num_steps, start_cell, direction, hor_inc)
+
+    def arithmetic_seqs_found(self, arr, opp_arr, factor, length, blanks, straight):
         # given an unsorted list of integers, search for an arithmetic sequence
         # opp_arr is passed to differentiate between blank spaces and spaces occupied by opponent
         # factor is the difference between consecutive terms
         # length is the number of terms we want
         # blanks is the number of blank spaces we're allowed
 
-        stop_point = 41  # highest cell index in the grid
+        stop_point = self.max_board_ind
         seqs = []  # stores sequences we find
         blanks_used = 0
 
@@ -61,106 +89,76 @@ class ConnectFour(DeterministicGame):
             while pointer <= stop_point:
                 if pointer in arr:
                     if len(seq) == 0:  # start point needs to be in the correct section of grid
-                        if factor == 6:  # streak is going to the left
-                            if pointer % 7 > 2:  # start in center or right section of the grid
-                                seq.append(pointer)
-                            else:
-                                pass
-                        elif factor % 7 == 1:  # streak is going to the right
-                            if pointer % 7 < 4:  # start in center or left section of the grid
-                                seq.append(pointer)
-                            else:
-                                pass
-                        else:  # streak is vertical, so we don't care where it starts
+                        # check length - 1 steps ahead, always forward
+                        if self.is_seq_possible(length - 1, factor, 1, pointer):
                             seq.append(pointer)
                     else:
                         seq.append(pointer)
-                        if len(seq) == length:  # completed the sequence
-                            seqs.append(seq)
                 elif pointer in opp_arr:  # opponent occupies spot
                     seq.clear()
                     blanks_used = 0
-                else:  # spot is blank, check if it is accessible
+                else:  # spot is blank,
                     if blanks_used == blanks:  # run out of blanks allowed
                         seq.clear()
                         blanks_used = 0
+                    elif straight:  # need to make sure we have or can get [length] occupied cells in a row
+                        if len(seq) - blanks_used >= length or len(seq) < blanks:
+                            seq.append(pointer)
+                            blanks_used += 1
+                        else:
+                            seq.clear()
+                            blanks_used = 0
                     else:
                         seq.append(pointer)
                         blanks_used += 1
-                        if len(seq) == length:  # completed the sequence
-                            seqs.append(seq)
+                if len(seq) == length:  # completed the sequence
+                    seqs.append(seq)
+                    if seq[0] in arr:  # check if starting point was a blank
+                        blanks_used = max(0, blanks_used - 1)
+                    seq.pop(0)  # remove first element, see if we can keep moving along this line
                 pointer += factor
 
         return seqs
 
-    @staticmethod
-    def get_blockages(buffer_space, opp_mask, prev_space, h, factor):
-        # if h is 0, we're checking buffer next to the start of the streak, end if 1
-        blockages = 0.0  # tracks if buffer spaces are not open
-
-        vertical_bound = 0 - (h * 41)
-        direct = 1 - (2 * h)
-        factor_six_spillover_col = 6 * (1 - h)  # opposite edge as other streaks
-        other_spillover_col = 6 * h
-
-        if buffer_space * direct >= vertical_bound:  # check if we've crossed top or bottom of grid
-            if factor == 6:
-                if prev_space % 7 == factor_six_spillover_col:  # edge case
-                    blockages += 1.0
-            elif factor != 7 and prev_space % 7 == other_spillover_col:
-                blockages += 1.0
-
-            # check if opponent occupies buffer
-            elif buffer_space in opp_mask:
-                blockages += 1.0
-
-        return blockages
-
-    # determining game status
-    def has_streak(self, player, length, fork):
+    def has_streak(self, player, length, fork, straight):
         buffer = 4 - length  # if we find a streak of 3, need an open space to get 4
         # fork is True if we need a buffer on both sides
+        # if straight is True, must be [length] cells in a row
         mask = self.player_masks[player]
         opp_mask = self.player_masks[(player + 1) % 2]
 
         for t in range(len(self.streak_types)):
             factor = self.streak_types[t]
-            streaks = self.arithmetic_seqs_found(mask, opp_mask, factor, length, buffer)
+            streaks = self.arithmetic_seqs_found(mask, opp_mask, factor, 4, buffer, straight)
             if len(streaks) > 0:
                 if buffer == 0:  # streak is already a four in a row
                     return True
 
-                # if streaks have less than 4 elements, check that the buffer spaces are open
+                # if streaks have less than 4 occupied cells, check that the buffer spaces are reachable
+                win_threats = 0
                 for st in streaks:
-                    low_buffer = min(st) - factor
-                    low_block = self.get_blockages(low_buffer, opp_mask, min(st), 0, factor)
-                    high_buffer = max(st) + factor
-                    high_block = self.get_blockages(high_buffer, opp_mask, max(st), 1, factor)
+                    # check that every cell in the sequence not occupied by the player is reachable
+                    unreachable = 0
+                    for cell in st:
+                        if not (cell in mask or self.cell_is_reachable(cell)):
+                            unreachable += 1
+                    if unreachable == 0:  # streak can be completed (if buffer > 1 relies on opponent not blocking)
+                        win_threats += 1
 
-                    if buffer == 1:
-                        if fork and low_block == 0.0 and high_block == 0.0:
-                            return True
-                        if not fork and (low_block == 0.0 or high_block == 0.0):
-                            return True
+                    if win_threats >= 1 and not fork:
+                        return True
+                    if win_threats >= 2:
+                        return True
 
-                    else:  # buffer == 2
-                        low_low_buffer = low_buffer - factor
-                        low_block += 0.5 * self.get_blockages(low_low_buffer, opp_mask, low_buffer, 0, factor)
-                        high_high_buffer = high_buffer + factor
-                        high_block += 0.5 * self.get_blockages(high_high_buffer, opp_mask, high_buffer, 1, factor)
-
-                        if fork and min(low_block, high_block) == 0.0 and max(low_block, high_block) < 1.0:
-                            return True
-                        if not fork and min(low_block, high_block) == 0.0:
-                            return True
-
-        return False  # no streaks found
+        return False  # no streaks found or could be completed
 
     def get_possible_moves(self):
         # first check for a four in a row, and return an empty list if found
-        if self.has_streak(0, 4, False):
+        if self.has_streak(0, 4, False, True):
+            self.winner = 0
             return []
-        if self.has_streak(1, 4, False):
+        if self.has_streak(1, 4, False, True):
+            self.winner = 1
             return []
 
         # now check if there are any columns with open slots
@@ -189,15 +187,15 @@ class ConnectFour(DeterministicGame):
         # also True if a fork can be created (3 in a row with 2 ways to get to 4, can't block both)
 
         # must check if player already has 4 in a row
-        if self.has_streak(player, 4, False):
+        if self.has_streak(player, 4, False, True):
             return True
 
         # check if there is a three in a row with an open slot to get to 4
-        if self.has_streak(player, 3, False):
+        if self.has_streak(player, 3, False, False):
             return True
 
         # check if there is a two in a row with the chance of creating a fork
-        if self.has_streak(player, 2, True):
+        if self.has_streak(player, 2, True, True):
             return True
 
         return False
@@ -210,12 +208,12 @@ class ConnectFour(DeterministicGame):
         if player == self.current_player:
             # player is about to move, check for 2-streak open in one direction
             for st in self.streak_types:
-                current_options = self.arithmetic_seqs_found(mask, opp_mask, st, 4, 2)
+                current_options = self.arithmetic_seqs_found(mask, opp_mask, st, 4, 2, True)
                 score += 100 * current_options
 
         else:  # player is not about to move, check if they have a winning move opponent must block
             for st in self.streak_types:
-                current_options = self.arithmetic_seqs_found(mask, opp_mask, st, 4, 1)
+                current_options = self.arithmetic_seqs_found(mask, opp_mask, st, 4, 1, False)
                 score += 100 * current_options
 
         return score
