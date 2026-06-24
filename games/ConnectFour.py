@@ -152,6 +152,9 @@ class ConnectFour(DeterministicGame):
 
         return False  # no streaks found or could be completed
 
+    def open_grid_spaces(self):
+        return 42 - np.sum(self.col_heights)
+
     def get_possible_moves(self):
         # first check for a four in a row, and return an empty list if found
         if self.has_streak(0, 4, False, True):

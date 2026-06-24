@@ -33,6 +33,9 @@ class DeterministicGame:
         self.current_player = self.current_player % 2
 
     # game status related methods
+    def open_grid_spaces(self):
+        return 0  # override in child classes
+
     def get_possible_moves(self):
         return []  # override in child classes
 
