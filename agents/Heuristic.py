@@ -1,5 +1,6 @@
-import Strategy
+from Strategy import Strategy
 import numpy as np
+import copy
 
 
 class Heuristic(Strategy):
@@ -10,7 +11,7 @@ class Heuristic(Strategy):
     def choose_move(self, possible_moves, game):
         # allocate once on first call
         if self.analysis_game is None:
-            self.analysis_game = game.copy()  # already synced to current real state
+            self.analysis_game = copy.copy(game)  # already synced to current real state
         else:
             self.analysis_game.sync(game)
 
@@ -20,4 +21,4 @@ class Heuristic(Strategy):
             ratings[m] = self.analysis_game.score_current_pos()
             self.analysis_game.undo_move()
 
-        return ratings.argmax()
+        return possible_moves[ratings.argmax()]

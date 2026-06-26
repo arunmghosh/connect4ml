@@ -1,10 +1,12 @@
-import DeterministicGame
+from DeterministicGame import DeterministicGame
 import numpy as np
 
 
 class ConnectFour(DeterministicGame):
 
-    empty_board = np.empty([5, 6], dtype=str)
+    rows = 6
+    columns = 7
+    empty_board = np.zeros([rows, columns], dtype=int)  # 0 means empty cell
 
     def __init__(self, players):
         # players is an array of 2 Player objects
@@ -15,8 +17,7 @@ class ConnectFour(DeterministicGame):
         # useful information about the board
         self.min_board_ind = 0
         self.max_board_ind = self.min_board_ind + self.num_states - 1
-        self.player_tokens = np.array(["R", "Y"])
-        self.col_heights = np.zeros(len(self.board_state[0]))
+        self.col_heights = np.zeros(len(self.board_state[0]), dtype=int)
         self.num_actions = len(self.col_heights)
 
         # search board
@@ -37,9 +38,9 @@ class ConnectFour(DeterministicGame):
         next_slot = self.col_heights[move]
 
         # update board state
-        self.board_state[next_slot][move] = self.player_tokens[self.current_player]
+        self.board_state[next_slot][move] = self.current_player + 1  # 1 for player 1, and so on
         self.col_heights[move] += 1
-        super().update_board()
+        super().update_board(move)
 
     def update_mask(self, move):
         cell_id = move + (self.col_heights[move] * 7)
@@ -221,7 +222,7 @@ class ConnectFour(DeterministicGame):
 
     # analysis mechanics
     def __copy__(self):
-        game = super().copy()
+        game = super().__copy__()
         game.col_heights = self.col_heights.copy()
         return game
 
@@ -239,8 +240,8 @@ class ConnectFour(DeterministicGame):
 
         # reset board attributes
         for r in range(len(self.board_state)):
-            for c in self.board_state[r]:
-                self.board_state[r][c] = ""  # empty cell
+            for c in range(len(self.board_state[r])):
+                self.board_state[r][c] = 0  # empty cell
 
         for col in range(len(self.col_heights)):
             self.col_heights[col] = 0  # empty column

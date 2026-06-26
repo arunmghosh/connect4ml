@@ -1,4 +1,4 @@
-import Strategy
+from Strategy import Strategy
 
 
 class User(Strategy):

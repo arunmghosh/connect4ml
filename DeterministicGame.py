@@ -6,10 +6,6 @@ class DeterministicGame:
     def __init__(self, name, players, board_state, filename):
         self.name = name
 
-        # board attributes
-        self.num_states = (len(self.board_state) * len(self.board_state[0]))
-        self.num_actions = 0  # override in child classes
-
         # player related attributes
         self.players = players  # array of Player objects, assume there are 2 players
         self.current_player = 0  # player moving, index
@@ -20,6 +16,10 @@ class DeterministicGame:
         self.board_state = board_state  # where moves are in the array
         self.winner = None  # index of player if there is a winner, None if there is a draw
         self.result = "Draw."
+
+        # board attributes
+        self.num_states = (len(self.board_state) * len(self.board_state[0]))
+        self.num_actions = 0  # override in child classes
 
         # analysis tools
         self.prev_move = 0  # for the sake of backtracking during analysis
@@ -57,9 +57,9 @@ class DeterministicGame:
 
     def determine_outcome(self):
         if self.winner == 0:
-            self.update_result(self.players[0] + " wins!")
+            self.update_result(str(self.players[0]) + " wins!")
         elif self.winner == 1:
-            self.update_result(self.players[1] + " wins!")
+            self.update_result(str(self.players[1]) + " wins!")
         # result string is "Draw." by default
 
     # minimax helper
@@ -105,8 +105,8 @@ class DeterministicGame:
 
     # DQN helper
     def sample_move_space(self):
-        # return random integer between 1 and num_actions (inclusive)
-        return random.randint(1, self.num_actions)
+        # return random integer between 0 and num_actions - 1 (inclusive)
+        return random.randint(0, self.num_actions - 1)
 
     def step(self, new_move):
         self.update_board(new_move)

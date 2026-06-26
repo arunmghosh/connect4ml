@@ -1,4 +1,5 @@
-import Strategy
+from Strategy import Strategy
+import copy
 
 
 class Minimax(Strategy):
@@ -17,9 +18,11 @@ class Minimax(Strategy):
             best_score += min(arr)
         best_move = arr.index(best_score)
 
-        # update trans table
-        self.analysis_game.trans_table[pos_key]["score"] = best_score
-        self.analysis_game.trans_table[pos_key]["best move"] = best_move
+        # update or create trans table entry
+        self.analysis_game.recorded_positions[pos_key] = {
+            "score": best_score,
+            "best move": best_move
+        }
 
         # return the best move
         return best_move
@@ -68,7 +71,7 @@ class Minimax(Strategy):
     def choose_move(self, possible_moves, game):
         # allocate once on first call
         if self.analysis_game is None:
-            self.analysis_game = game.copy()  # already synced to current real state
+            self.analysis_game = copy.copy(game)  # already synced to current real state
         else:
             self.analysis_game.sync(game)
 
@@ -83,7 +86,7 @@ class Minimax(Strategy):
                 self.analysis_game.update_board(possible_moves[m])
                 scores.append(self.analysis_game.score_current_pos())
                 self.analysis_game.undo_move()
-            return self.process_analysis(scores, pos, base_turn)
+            return possible_moves[self.process_analysis(scores, pos, base_turn)]
 
         # new position, trigger evaluation
         move_evals = []
@@ -95,7 +98,7 @@ class Minimax(Strategy):
             else:
                 move_evals.append(self.minimax_helper(1, self.max_depth, float('-inf'),
                                                       float('inf')))
-            game.undo_move()
+            self.analysis_game.undo_move()
 
         # choose best move
-        return self.process_analysis(move_evals, pos, base_turn)
+        return possible_moves[self.process_analysis(move_evals, pos, base_turn)]
