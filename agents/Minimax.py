@@ -20,7 +20,6 @@ class Minimax(Strategy):
         # update trans table
         self.analysis_game.trans_table[pos_key]["score"] = best_score
         self.analysis_game.trans_table[pos_key]["best move"] = best_move
-        self.analysis_game.trans_table[pos_key]["depth"] = self.depth_reached
 
         # return the best move
         return best_move

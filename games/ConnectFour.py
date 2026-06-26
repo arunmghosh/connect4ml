@@ -14,9 +14,10 @@ class ConnectFour(DeterministicGame):
 
         # useful information about the board
         self.min_board_ind = 0
-        self.max_board_ind = self.min_board_ind + (len(self.board_state) * len(self.board_state[0])) - 1
+        self.max_board_ind = self.min_board_ind + self.num_states - 1
         self.player_tokens = np.array(["R", "Y"])
-        self.col_heights = np.array([0, 0, 0, 0, 0, 0, 0], dtype=int)
+        self.col_heights = np.zeros(len(self.board_state[0]))
+        self.num_actions = len(self.col_heights)
 
         # search board
         self.current_streak = 0
@@ -152,9 +153,6 @@ class ConnectFour(DeterministicGame):
 
         return False  # no streaks found or could be completed
 
-    def open_grid_spaces(self):
-        return 42 - np.sum(self.col_heights)
-
     def get_possible_moves(self):
         # first check for a four in a row, and return an empty list if found
         if self.has_streak(0, 4, False, True):
@@ -235,3 +233,18 @@ class ConnectFour(DeterministicGame):
         super().undo_move()
         self.col_heights[self.prev_move] -= 1
         self.board_state[self.col_heights[self.prev_move]] = ""  # empty last occupied cell
+
+    def reset(self):
+        super().reset()
+
+        # reset board attributes
+        for r in range(len(self.board_state)):
+            for c in self.board_state[r]:
+                self.board_state[r][c] = ""  # empty cell
+
+        for col in range(len(self.col_heights)):
+            self.col_heights[col] = 0  # empty column
+
+        # reset search attributes
+        self.current_streak = 0
+        self.traversal_steps = 0

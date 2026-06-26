@@ -1,9 +1,14 @@
 import pickle
+import random
 
 
 class DeterministicGame:
     def __init__(self, name, players, board_state, filename):
         self.name = name
+
+        # board attributes
+        self.num_states = (len(self.board_state) * len(self.board_state[0]))
+        self.num_actions = 0  # override in child classes
 
         # player related attributes
         self.players = players  # array of Player objects, assume there are 2 players
@@ -33,9 +38,6 @@ class DeterministicGame:
         self.current_player = self.current_player % 2
 
     # game status related methods
-    def open_grid_spaces(self):
-        return 0  # override in child classes
-
     def get_possible_moves(self):
         return []  # override in child classes
 
@@ -101,6 +103,21 @@ class DeterministicGame:
         # if neither player wins immediately, count their chances to win
         return self.evaluate_win_chance(self.current_player) - self.evaluate_win_chance(next_player)
 
+    # DQN helper
+    def sample_move_space(self):
+        # return random integer between 1 and num_actions (inclusive)
+        return random.randint(1, self.num_actions)
+
+    def step(self, new_move):
+        self.update_board(new_move)
+        self.update_status()
+        terminated = self.game_finished
+        reward = 0
+        if terminated:
+            if self.winner == self.current_player:  # the move has won the game
+                reward += 1
+        return self.board_state, reward, terminated
+
     # data collection related methods
     def encode(self):
         return 0 # override in child classes
@@ -123,3 +140,18 @@ class DeterministicGame:
         self.determine_outcome()
         print(self.result)
         self.export_new_data()
+
+    def reset(self):
+        # erase move history
+        self.current_player = 0
+        self.player_masks[0].clear()
+        self.player_masks[1].clear()
+
+        # reset outcome trackers
+        self.game_finished = False
+        self.winner = None  # index of player if there is a winner, None if there is a draw
+        self.result = "Draw."
+
+        # reset analysis tools
+        self.prev_move = 0  # for the sake of backtracking during analysis
+        # more will be done in child classes
